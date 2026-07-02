@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Retro Copter Cave</title>
+    <style>
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+        body {
+            margin: 0; padding: 0; background: #0a0e14;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: flex-start; min-height: 100vh; color: #fff; overflow: hidden;
+        }
+        #score-board { font-size: 22px; font-weight: bold; margin: 15px 0 5px 0; color: #ffeb3b; }
+        #canvas-container { position: relative; width: 95vw; max-width: 400px; height: 320px; border: 4px solid #333; }
+        canvas { background: #05070a; display: block; width: 100%; height: 100%; }
+        #overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 10;
+        }
+        #overlay.hidden { display: none; }
+        button {
+            background: #ffeb3b; color: #000; border: none; padding: 12px 30px;
+            font-size: 16px; font-weight: bold; cursor: pointer; border-radius: 5px; margin-top: 15px;
+        }
+        #mobile-controls {
+            display: flex; width: 95vw; max-width: 400px; padding: 15px 0; flex-grow: 1; justify-content: center;
+        }
+        .action-btn {
+            width: 100%; height: 75px; background: #ffeb3b; border: 3px solid #fff;
+            color: black; border-radius: 12px; display: flex; align-items: center;
+            justify-content: center; font-weight: bold; font-size: 22px;
+        }
+        .btn-active { background: #fbc02d !important; }
+    </style>
+</head>
+<body>
+
+    <div id="score-board">DISTANCE: <span id="score-val">0</span>m</div>
+
+    <div id="canvas-container">
+        <div id="overlay">
+            <h2 id="msg">RETRO COPTER</h2>
+            <button onclick="startGame()">LAUNCH</button>
+        </div>
+        <canvas id="copterCanvas" width="400" height="320"></canvas>
+    </div>
+
+    <div id="mobile-controls">
+        <div class="action-btn" id="action-trigger">HOLD TO FLY UP</div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('copterCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let gameActive = false;
+    let score = 0;
+    let thrusting = false;
+
+    let copter = { x: 60, y: 140, size: 16, vy: 0, gravity: 0.25, lift: -0.55 };
+    let obstacles = [];
+    let gameSpeed = 3;
+    let spawnTimer = 0;
+
+    function startGame() {
+        score = 0; copter.y = 140; copter.vy = 0; obstacles = []; gameSpeed = 3; spawnTimer = 0; thrusting = false;
+        document.getElementById('score-val').innerText = score;
+        document.getElementById('overlay').classList.add('hidden');
+        gameActive = true;
+    }
+
+    function triggerGameOver() {
+        gameActive = false;
+        document.getElementById('msg').innerText = "COPTER CRASHED";
+        document.getElementById('overlay').classList.remove('hidden');
+    }
+
+    function loop() {
+        window.requestAnimationFrame(loop);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw Copter Body
+        ctx.fillStyle = "#ffeb3b";
+        ctx.fillRect(copter.x, copter.y, copter.size * 1.5, copter.size);
+
+        // Process Obstacle Block Arrays
+        ctx.fillStyle = "#e91e63";
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+            let obs = obstacles[i];
+            if (gameActive) obs.x -= gameSpeed;
+
+            // Render matching top and bottom pillars
+            ctx.fillRect(obs.x, 0, obs.width, obs.topHeight);
+            ctx.fillRect(obs.x, canvas.height - obs.botHeight, obs.width, obs.botHeight);
+
+            // AABB Collision Detections
+            if (copter.x + copter.size * 1.5 > obs.x && copter.x < obs.x + obs.width) {
+                if (copter.y < obs.topHeight || copter.y + copter.size > canvas.height - obs.botHeight) {
+                    triggerGameOver();
+                }
+            }
+
+            if (obs.x + obs.width < 0) {
+                obstacles.splice(i, 1);
+                score += 5;
+                document.getElementById('score-val').innerText = score;
+                if (score % 50 === 0) gameSpeed += 0.5;
+            }
+        }
+
+        if (!gameActive) return;
+
+        // Apply Flight Physics Vectors
+        if (thrusting) copter.vy += copter.lift;
+        else copter.vy += copter.gravity;
+        
+        // Terminal velocity drag simulation dampening caps
+        copter.vy = Math.max(-4.5, Math.min(4.5, copter.vy));
+        copter.y += copter.vy;
+
+        // Ground/Roof border failures
+        if (copter.y < 0 || copter.y + copter.size > canvas.height) triggerGameOver();
+
+        spawnTimer++;
+        if (spawnTimer > 80) {
+            let topH = Math.floor(Math.random() * 100) + 20;
+            let botH = Math.floor(Math.random() * 100) + 20;
+            obstacles.push({ x: canvas.width, width: 40, topHeight: topH, botHeight: botH });
+            spawnTimer = 0;
+        }
+    }
+
+    const trigger = document.getElementById('action-trigger');
+    const startThrust = (e) => { if(e) e.preventDefault(); thrusting = true; trigger.classList.add('btn-active'); };
+    const stopThrust = () => { thrusting = false; trigger.classList.remove('btn-active'); };
+
+    trigger.addEventListener('touchstart', startThrust);
+    trigger.addEventListener('touchend', stopThrust);
+    trigger.addEventListener('mousedown', startThrust);
+    trigger.addEventListener('mouseup', stopThrust);
+    trigger.addEventListener('mouseleave', stopThrust);
+
+    loop();
+</script>
+</body>
+</html>
